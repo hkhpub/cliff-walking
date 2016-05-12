@@ -19,7 +19,7 @@ class Cell:
 class Agent:
     def __setattr__(self, key, val):
         if key == 'cell':
-            old = self.__dict__get(key, None)
+            old = self.__dict__.get(key, None)
             if old is not None:
                 old.agents.remove(self)
             if val is not None:
@@ -186,7 +186,7 @@ class World:
         for j in range(fh):
             line = lines[j]
             for i in range(min(fw, len(line))):
-                self.grid[starty + j][startx + i].load(line[i])
+                self.grid[starty + j][startx + i].load(line[i], (i, j))
 
     def update(self):
         if hasattr(self.Cell, 'update'):
@@ -218,11 +218,6 @@ class World:
                       (0, 1), (-1, 1), (-1, 0), (-1, -1)][dir]
         elif self.directions == 4:
             dx, dy = [(0, -1), (1, 0), (0, 1), (-1, 0)][dir]
-        elif self.directions == 6:
-            if y % 2 == 0:
-                dx, dy = [(1, 0), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1)][dir]
-            else:
-                dx, dy = [(1, 0), (1, 1), (0, 1), (-1, 0), (0, -1), (1, -1)][dir]
 
         x2 = x + dx
         y2 = y + dy
@@ -297,8 +292,6 @@ class PygameDisplay:
         pygame.init()
         w = self.world.width * size
         h = self.world.height * size
-        if self.world.directions == 6:
-            w += size / 2
         if PygameDisplay.screen is None or PygameDisplay.screen.get_width() != w or PygameDisplay.screen.get_height() != h:
             PygameDisplay.screen = pygame.display.set_mode((w, h), pygame.RESIZABLE, 32)
         self.activated = True
@@ -308,26 +301,22 @@ class PygameDisplay:
     def redraw(self):
         if not self.activated:
             return
-        self.screen.fill(self.defaultColor)
-        hexgrid = self.world.directions == 6
+        self.screen.fill(pygame.color.Color('gray'))
         self.offsetx = (self.screen.get_width() - self.world.width * self.size) / 2
         self.offsety = (self.screen.get_height() - self.world.height * self.size) / 2
         sy = self.offsety
         odd = False
         for row in self.world.grid:
             sx = self.offsetx
-            if hexgrid and odd:
-                sx += self.size / 2
             for cell in row:
                 if len(cell.agents) > 0:
                     c = self.getColor(cell.agents[0])
                 else:
                     c = self.getColor(cell)
-                if c != self.defaultColor:
-                    try:
-                        self.screen.fill(c, (sx, sy, self.size, self.size))
-                    except TypeError:
-                        print 'Error: invalid color:', c
+                try:
+                    self.screen.fill(c, (sx, sy, self.size-1, self.size-1))
+                except TypeError:
+                    print 'Error: invalid color:', c
                 sx += self.size
             odd = not odd
             sy += self.size
@@ -337,8 +326,6 @@ class PygameDisplay:
             return
         sx = x * self.size + self.offsetx
         sy = y * self.size + self.offsety
-        if y % 2 == 1 and self.world.directions == 6:
-            sx += self.size / 2
 
         cell = self.world.grid[y][x]
         if len(cell.agents) > 0:
@@ -346,7 +333,7 @@ class PygameDisplay:
         else:
             c = self.getColor(cell)
 
-        self.screen.fill(c, (sx, sy, self.size, self.size))
+        self.screen.fill(c, (sx, sy, self.size-1, self.size-1))
 
     def update(self):
         if not self.activated:
@@ -376,9 +363,9 @@ class PygameDisplay:
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
                 self.pause()
 
-            pygame.display.flip()
-            if self.delay > 0:
-                time.sleep(self.delay * 0.1)
+        pygame.display.flip()
+        if self.delay > 0:
+            time.sleep(self.delay * 0.05)
 
     def setTitle(self, title):
         if not self.activated:
@@ -406,7 +393,10 @@ class PygameDisplay:
         self.redraw()
 
     def getColor(self, obj):
-        c = getattr(obj, 'color', None)
+        if obj == 'gridline':
+            c = 'gray'
+        else:
+            c = getattr(obj, 'color', None)
         if c is None:
             c = getattr(obj, 'color', 'white')
         if callable(c):
