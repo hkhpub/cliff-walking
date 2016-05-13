@@ -1,8 +1,7 @@
 import cellular
 import qlearn
-import time
 import random
-import shelve
+
 
 directions = 4
 startPoint = None
@@ -18,9 +17,9 @@ def pickRandomLocation():
             return cell
 
 
-def backtoStartLocation():
+def startCell():
     if startPoint is not None:
-        cell = world.getCell(startPoint.x, startPoint.y)
+        cell = world.getCell(startPoint[0], startPoint[1])
     else:
         cell = world.getCell(1, 4)
     return cell
@@ -31,8 +30,13 @@ def backupStep(lastState, lastAction, reward, state):
 
 
 def saveEpisode():
+    global stepHistory
     for step in stepHistory:
-        print step
+        if step is not None:
+            f.write(str(step)+'\n')
+    f.write('\n')
+    stepHistory = []
+    pass
 
 
 class Cell(cellular.Cell):
@@ -54,6 +58,7 @@ class Cell(cellular.Cell):
             return 'white'
 
     def load(self, data, loc):
+        global startPoint
         if data == 'X':
             self.wall = True
         elif data == 'C':
@@ -75,69 +80,72 @@ class Mouse(cellular.Agent):
 
     def __init__(self):
         self.ai = None
-        self.ai = qlearn.QLearn(actions=range(directions),
-                                alpha=0.1, gamma=0.9, epsilon=0.1)
-
-        self.lastState = None
+        self.ai = qlearn.QLearn(actions=range(directions), alpha=0.1, gamma=0.9, epsilon=0.1)
         self.lastAction = None
+        self.lastState = None
+        self.score = 0
 
     def update(self):
         state = self.calcState()
-        reward = -1
+        reward = self.calcReward()
+        action = self.ai.chooseAction(state)
+        if self.lastAction is not None:
+            self.ai.learn(self.lastState, self.lastAction, reward, state)
+        self.lastState = state
+        self.lastAction = action
+        backupStep(self.lastState, self.lastAction, reward, state)
 
         # goal reached, episode end.
         if self.cell.goal:
-            if self.lastState is not None:
-                self.ai.learn(self.lastState, self.lastAction, reward, state)
-            self.lastState = None
-            self.cell = backtoStartLocation()
-            backupStep(self.lastState, self.lastAction, reward, state)
+            self.cell = startCell()
+            self.lastAction = None
             saveEpisode()
             return
 
         # fell to the cliff.
         if self.cell.cliff:
-            reward = -100
-            self.cell = backtoStartLocation()
-
-        if self.lastState is not None:
-            self.ai.learn(self.lastState, self.lastAction, reward, state)
-
-        backupStep(self.lastState, self.lastAction, reward, state)
-
-        state = self.calcState()
-        action = self.ai.chooseAction(state)
-        self.lastState = state
-        self.lastAction = action
-
-        self.goInDirection(action)
+            self.lastAction = None
+            self.cell = startCell()
+        else:
+            self.goInDirection(action)
 
     def calcState(self):
         return self.cell.x, self.cell.y
 
+    def calcReward(self):
+        if self.cell.cliff:
+            return cliffReward
+        elif self.cell.goal:
+            self.score += 1
+            return goalReward
+        else:
+            return normalReward
+
+normalReward = -1
+cliffReward = -100
+goalReward = 0
 
 mouse = Mouse()
 world = cellular.World(Cell, directions=directions, filename='gridworld.txt')
 world.age = 0
 
-world.addAgent(mouse, cell=backtoStartLocation())
+world.addAgent(mouse, cell=startCell())
 
-# epsilonx = (0, 100000)
-# epsilony = (0.1, 0)
-# epsilonm = (epsilony[1] - epsilony[0]) / (epsilonx[1] - epsilony[0])
+f = open('episodes_qlearn.txt', 'w')
 
-# endAge = world.age + 150000
-# while world.age < endAge:
-#     world.update()
-#
-#     if world.age % 100 == 0:
-#         pass
-#
-#     if world.age % 10000 == 0:
-#         pass
+while mouse.score < 500:
+    world.update()
+    print 'age: %d score: %d' % (world.age, mouse.score)
 
+oldscore = None
+mouse.ai.epsilon = 0.005
 world.display.activate(size=30)
 world.display.delay = 1
 while 1:
     world.update()
+    if oldscore != mouse.score:
+        print mouse.score
+        oldscore = mouse.score
 
+f.flush()
+f.close()
