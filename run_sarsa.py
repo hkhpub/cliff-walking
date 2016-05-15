@@ -77,6 +77,9 @@ class Cell(cellular.Cell):
             self.start = False
             self.goal = False
 
+        if data != 'X':
+            self.stateCount += 1
+
 
 class Mouse(cellular.Agent):
     color = 'yellow'

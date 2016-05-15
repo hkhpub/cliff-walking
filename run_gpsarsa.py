@@ -1,7 +1,9 @@
 import cellular
-import qlearn
+import gpsarsa
 import random
 
+# num of states: 4x12=48
+# num of actions: 4
 
 directions = 4
 startPoint = None
@@ -17,7 +19,7 @@ def pickRandomLocation():
             return cell
 
 
-def startCell():
+def StartCell():
     if startPoint is not None:
         cell = world.getCell(startPoint[0], startPoint[1])
     else:
@@ -31,6 +33,7 @@ def backupStep(lastState, lastAction, reward, state):
 
 def saveEpisode():
     global stepHistory
+    # appending write
     for step in stepHistory:
         if step is not None:
             f.write(str(step)+'\n')
@@ -44,6 +47,7 @@ class Cell(cellular.Cell):
     cliff = False
     start = False
     goal = False
+    stateCount = 0
 
     def color(self):
         if self.wall:
@@ -74,8 +78,8 @@ class Cell(cellular.Cell):
             self.start = False
             self.goal = False
 
-        if data != 'X':
-            self.stateCount += 1
+        # if data != 'X':
+        #     self.stateCount += 1
 
 
 class Mouse(cellular.Agent):
@@ -83,24 +87,28 @@ class Mouse(cellular.Agent):
 
     def __init__(self):
         self.ai = None
-        self.ai = qlearn.QLearn(actions=range(directions), alpha=0.1, gamma=0.9, epsilon=0.1)
+        self.ai = gpsarsa.gpsarsa(actions=range(directions), nstates=48, epsilon=0.1, gamma=0.9)
         self.lastAction = None
         self.lastState = None
         self.score = 0
+
+    def startEpisode(self):
+        self.lastAction = random.choice(range(directions))
+        self.ai.startEpisode(StartCell(), self.lastAction)
 
     def update(self):
         state = self.calcState()
         reward = self.calcReward()
         action = self.ai.chooseAction(state)
         if self.lastAction is not None:
-            self.ai.learn(self.lastState, self.lastAction, reward, state)
+            self.ai.learn(self.lastState, self.lastAction, reward, state, action)
         self.lastState = state
         self.lastAction = action
         backupStep(self.lastState, self.lastAction, reward, state)
 
         # goal reached, episode end.
         if self.cell.goal:
-            self.cell = startCell()
+            self.cell = StartCell()
             self.lastAction = None
             saveEpisode()
             return
@@ -108,7 +116,7 @@ class Mouse(cellular.Agent):
         # fell to the cliff.
         if self.cell.cliff:
             self.lastAction = None
-            self.cell = startCell()
+            self.cell = StartCell()
         else:
             self.goInDirection(action)
 
@@ -131,14 +139,14 @@ goalReward = 0
 mouse = Mouse()
 world = cellular.World(Cell, directions=directions, filename='gridworld.txt')
 world.age = 0
+world.addAgent(mouse, cell=StartCell())
 
-world.addAgent(mouse, cell=startCell())
+f = open('episodes_sarsa.txt', 'w')
 
-f = open('episodes_qlearn.txt', 'w')
-
-while mouse.score < 500:
-    world.update()
-    print 'age: %d score: %d' % (world.age, mouse.score)
+mouse.startEpisode()
+# while mouse.score < 500:
+#     world.update()
+#     print 'age: %d score: %d' % (world.age, mouse.score)
 
 oldscore = None
 mouse.ai.epsilon = 0.005
@@ -152,3 +160,4 @@ while 1:
 
 f.flush()
 f.close()
+
