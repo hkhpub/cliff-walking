@@ -47,6 +47,7 @@ class Cell(cellular.Cell):
     cliff = False
     start = False
     goal = False
+    stateCount = 0
 
     def color(self):
         if self.wall:
@@ -139,12 +140,12 @@ world.addAgent(mouse, cell=StartCell())
 
 f = open('episodes_sarsa.txt', 'w')
 
-while mouse.score < 500:
+while mouse.score < 0:
     world.update()
     print 'age: %d score: %d' % (world.age, mouse.score)
 
 oldscore = None
-mouse.ai.epsilon = 0.005
+mouse.ai.epsilon = 0.1
 world.display.activate(size=30)
 world.display.delay = 1
 while 1:
